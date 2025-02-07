@@ -1,0 +1,11 @@
+{
+    "name": "Pelican",
+    "alias": "pelican",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "App\\Services\\Pelican\\Providers\\PelicanServiceProvider"
+    ],
+    "files": []
+}
