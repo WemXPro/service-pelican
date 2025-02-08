@@ -68,14 +68,7 @@ class Service implements ServiceInterface
                 "name" => "API Key",
                 "description" => "API Key of your Pelican panel",
                 "type" => "password",
-                "rules" => ['required'], // laravel validation rules
-            ],
-            [
-                "key" => "encrypted::pelican::client_api_key",
-                "name" => "Client API Key",
-                "description" => "Admin Client API Key of your Pelican panel",
-                "type" => "password",
-                "rules" => ['required'], // laravel validation rules
+                "rules" => ['required', 'starts_with:peli_'], // laravel validation rules
             ],
         ];
     }
@@ -253,12 +246,34 @@ class Service implements ServiceInterface
     public static function testConnection()
     {
         try {
-
+            Service::makeRequest('/api/application/users');
         } catch (\Exception $e) {
             return redirect()->back()->withError($e->getMessage());
         }
 
         return redirect()->back()->withSuccess('Successfully connected to Pelican API');
+    }
+
+    /**
+     * Make API request to Pelican API
+     */
+    public static function makeRequest($endpoint, $method = 'get', $data = [])
+    {
+        $method = strtolower($method);
+
+        if (!in_array($method, ['get', 'post', 'put', 'delete'])) {
+            throw new \Exception('Invalid method');
+        }
+
+        $response = Http::withToken(settings('encrypted::pelican::api_key'))
+            ->$method(settings('pelican::hostname') . $endpoint, $data);
+
+        if ($response->failed() OR $response->json() === null) {
+            dd($response, $response->json());
+            throw new \Exception("Failed to connect to Pelican API at endpoint: $endpoint with status code: {$response->status()} and response: {$response->body()}");
+        }
+
+        return $response;
     }
 
     /**
@@ -276,6 +291,56 @@ class Service implements ServiceInterface
      * @return void
      */
     public function create(array $data = [])
+    {
+        $pelicanUserId = $this->createPelicanUser();
+    }
+
+    /**
+     * Create the user on Pelican panel and store the data locally
+     * If the user already exists, return the user id on Pelican panel
+     *
+     * @return int
+     */
+    private function createPelicanUser(): int
+    {
+        $user = $this->order->user;
+
+        try {
+            // Attempt to find the user on Pelican with the external id
+            $userEmailResponse = Service::makeRequest("/api/application/users", 'get', [
+                'filter[email]' => $user->email,
+            ]);
+
+            // if api returns a user, store the user data locally and return the user id
+            if(isset($userEmailResponse['data'][0])) {
+                $this->storePelicanUserLocally(
+                    $userEmailResponse['data'][0]['attributes']
+                );
+
+                return $userEmailResponse['data'][0]['id'];
+            }
+        } catch(\Exception $e) {
+            
+        }
+
+        // attempt to create the user on Pelican
+        $randomPassword = Str::random(16);
+        $createUserResponse = Service::makeRequest("/api/application/users", 'post', [
+            'external_id' => "wemx{$user->id}",
+            'email' => $user->email,
+            'username' => $user->username . $user->id, // username must be unique
+            'password' => $randomPassword,
+        ]);
+
+        // store the user data locally
+        $this->storePelicanUserLocally(
+            $createUserResponse['data']['attributes']
+        );
+
+        return $createUserResponse['data']['id'];
+    }
+
+    private function storePelicanUserLocally($pelicanUserData)
     {
 
     }
