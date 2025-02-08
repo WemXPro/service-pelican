@@ -4,6 +4,7 @@ namespace App\Services\Pelican;
 
 use App\Services\ServiceInterface;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 use App\Models\Package;
 use App\Models\Order;
 
@@ -269,7 +270,7 @@ class Service implements ServiceInterface
             ->$method(settings('pelican::hostname') . $endpoint, $data);
 
         if ($response->failed() OR $response->json() === null) {
-            dd($response, $response->json());
+            dd($response, $response->json(), $endpoint, $data, $method);
             throw new \Exception("Failed to connect to Pelican API at endpoint: $endpoint with status code: {$response->status()} and response: {$response->body()}");
         }
 
@@ -294,6 +295,7 @@ class Service implements ServiceInterface
     {
         // define variables
         $pelicanUserId = $this->createPelicanUser();
+        dd($pelicanUserId);
         $order = $this->order;
         $package = $order->package;
 
@@ -343,7 +345,7 @@ class Service implements ServiceInterface
                     $userEmailResponse['data'][0]['attributes']
                 );
 
-                return $userEmailResponse['data'][0]['id'];
+                return $userEmailResponse['data'][0]['attributes']['id'];
             }
         } catch(\Exception $e) {
             
@@ -352,27 +354,56 @@ class Service implements ServiceInterface
         // attempt to create the user on Pelican
         $randomPassword = Str::random(16);
         $createUserResponse = Service::makeRequest("/api/application/users", 'post', [
-            'external_id' => "wemx{$user->id}",
+            'first_name' => $user->first_name,
+            'last_name' => $user->last_name,
             'email' => $user->email,
             'username' => $user->username . $user->id, // username must be unique
             'password' => $randomPassword,
         ]);
 
+        // email the user their Pelican panel credentials
+        $this->emailPterodactylUserCredentials(
+            $user->email,
+            $randomPassword
+        );
+
         // store the user data locally
-        $pelicanUserData = array_merge($createUserResponse['data']['attributes'], ['password' => $randomPassword]);
+        $pelicanUserData = array_merge($createUserResponse['attributes'], ['password' => $randomPassword]);
         $this->storePelicanUserLocally($pelicanUserData);
 
-        return $createUserResponse['data']['id'];
+        return $createUserResponse['attributes']['id'];
     }
 
+    /**
+     * Store the Pelican user data locally for future reference
+     *
+     * @return void
+     */
     private function storePelicanUserLocally(array $pelicanUserData): void
     {
         $this->order->createExternalUser([
             'external_id' => $pelicanUserData['id'],
             'username' => $pelicanUserData['username'],
-            'password' => $pelicanUserData['password'] ?? null,
+            'password' => $pelicanUserData['password'] ?? 'unknown',
             'data' => $pelicanUserData,
          ]);
+    }
+
+    /**
+     * Email the user their Pelican panel credentials
+     *
+     * @return void
+     */
+    private function emailPterodactylUserCredentials(string $email, string $password): void
+    {
+        $this->order->user->email([
+            'subject' => 'Game Panel Account Created',
+            'content' => "Your account has been created on the game panel. You can login using the following details: <br><br> Email: {$email} <br> Password: {$password}",
+            'button' => [
+                'name' => 'Login to Game Panel',
+                'url' => settings('pelican::hostname'),
+            ]
+        ]);
     }
 
     /**
