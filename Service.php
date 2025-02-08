@@ -292,7 +292,16 @@ class Service implements ServiceInterface
      */
     public function create(array $data = [])
     {
+        // define variables
         $pelicanUserId = $this->createPelicanUser();
+        $order = $this->order;
+        $package = $order->package;
+
+        // Create the server on Pelican panel
+        $createServerResponse = Service::makeRequest("/api/application/servers", 'post', [
+            'external_id' => "wemx{$order->id}",
+            'name' => $package->name,
+        ]);
     }
 
     /**
@@ -304,6 +313,10 @@ class Service implements ServiceInterface
     private function createPelicanUser(): int
     {
         $user = $this->order->user;
+
+        if($this->order->hasExternalUser()) {
+            return $this->order->getExternalUser()->external_id;
+        }
 
         try {
             // Attempt to find the user on Pelican with the external id
@@ -333,16 +346,20 @@ class Service implements ServiceInterface
         ]);
 
         // store the user data locally
-        $this->storePelicanUserLocally(
-            $createUserResponse['data']['attributes']
-        );
+        $pelicanUserData = array_merge($createUserResponse['data']['attributes'], ['password' => $randomPassword]);
+        $this->storePelicanUserLocally($pelicanUserData);
 
         return $createUserResponse['data']['id'];
     }
 
-    private function storePelicanUserLocally($pelicanUserData)
+    private function storePelicanUserLocally(array $pelicanUserData): void
     {
-
+        $this->order->createExternalUser([
+            'external_id' => $pelicanUserData['id'],
+            'username' => $pelicanUserData['username'],
+            'password' => $pelicanUserData['password'] ?? null,
+            'data' => $pelicanUserData,
+         ]);
     }
 
     /**
