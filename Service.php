@@ -301,6 +301,19 @@ class Service implements ServiceInterface
         $createServerResponse = Service::makeRequest("/api/application/servers", 'post', [
             'external_id' => "wemx{$order->id}",
             'name' => $package->name,
+            'user' => $pelicanUserId,
+            'egg' => $package->data('egg_id'),
+            "limits" => [
+                "memory" => $order->option('memory_limit', 0),
+                "swap" => $package->data('swap_limit', 0),
+                "disk" => $order->option('disk_limit', 0),
+                "io" => $package->data('block_io_weight', 500),
+                "cpu" => $order->option('cpu_limit', 0),
+            ],
+            "feature_limits" => [
+                "databases" => $order->option('database_limit', 0),
+                "backup_megabytes_limit" => $order->option('backup_limit_size', 0),
+            ],
         ]);
     }
 
