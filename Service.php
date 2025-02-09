@@ -83,8 +83,6 @@ class Service implements ServiceInterface
      */
     public static function setPackageConfig(Package $package): array
     {
-        $locations = [];
-
         $config = [
             [
                 "col" => "col-4",
@@ -163,38 +161,20 @@ class Service implements ServiceInterface
                 "rules" => ['required'],
             ],
             [
-                "col" => "col-12",
-                "key" => "locations[]",
-                "name" => "Selectable Locations",
-                "description" =>  "The location that the server can be deployed to if the user does not select a location.",
-                "type" => "select",
-                "options" => $locations,
-                "multiple" => true,
-                "rules" => ['required'],
-            ],
-            [
-                "key" => "location_id",
-                "name" => "Location ID (Leave Empty!)",
-                "description" =>  "This field should be left empty. Its used as configurable options field.",
-                "type" => "text",
-                "default_value" => 0,
+                "key" => "node_id",
+                "name" => "Node ID",
+                "description" =>  "The node on which the server should be deployed.",
+                "type" => "numbers",
                 "rules" => ['required', 'numeric'],
                 'is_configurable' => true,
-            ],
-            [
-                "key" => "nest_id",
-                "name" => "Nest ID",
-                "description" =>  "Nest ID of the server you want to use for this package. You can find the nest ID by going to the egg page and looking at the URL. It will be the number at the end of the URL.",
-                "type" => "text",
-                "default_value" => 2, // "Minecraft
-                "rules" => ['required', 'numeric'],
             ],
             [
                 "key" => "egg_id",
                 "name" => "Egg ID",
                 "description" =>  "Egg ID of the server you want to use for this package. You can find the egg ID by going to the egg page and looking at the URL. It will be the number at the end of the URL.",
                 "type" => "text",
-                "default_value" => 2, // "Minecraft
+                "default_value" => 3, // paper minecraft
+                'save_on_change' => true,
                 "rules" => ['required', 'numeric'],
             ],
             [
@@ -299,22 +279,41 @@ class Service implements ServiceInterface
 
         // Create the server on Pelican panel
         $createServerResponse = Service::makeRequest("/api/application/servers", 'post', [
-            'external_id' => "wemx{$order->id}",
+            //'external_id' => "wemx{$order->id}",
             'name' => $package->name,
-            'user' => $pelicanUserId,
-            'egg' => $package->data('egg_id'),
+            'user' => 1,
+            'egg' => 3,
+            'allocation' => 4,
+            'startup' => 'java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}}',
+            'docker_image' => 'ghcr.io/parkervcp/yolks:java_21',
+            'environment' => [
+                'SERVER_JARFILE' => 'server.jar',
+                'BUILD_NUMBER' => 'latest',
+            ],
             "limits" => [
-                "memory" => $order->option('memory_limit', 0),
-                "swap" => $package->data('swap_limit', 0),
-                "disk" => $order->option('disk_limit', 0),
-                "io" => $package->data('block_io_weight', 500),
-                "cpu" => $order->option('cpu_limit', 0),
+                "memory" => 0,
+                "swap" => 0,
+                "disk" => 0,
+                "io" => 0,
+                "cpu" => 0,
             ],
             "feature_limits" => [
-                "databases" => $order->option('database_limit', 0),
-                "backup_megabytes_limit" => $order->option('backup_limit_size', 0),
+                "databases" => 0,
+                "allocations" => 0,
+                'backups' => 0,
             ],
+            'deploy' => [
+                'locations' => [2],
+                'dedicated_ip' => false,
+                'port_range' => [25566, 25577],
+            ],
+            "start_on_completion" => true,
+            "skip_scripts" => false,
+            "oom_disabled" => false,
+            "swap_disabled" => false,
         ]);
+
+        dd($createServerResponse, $createServerResponse->json(), $createServerResponse->status());
     }
 
     /**
