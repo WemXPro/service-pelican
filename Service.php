@@ -404,7 +404,7 @@ class Service implements ServiceInterface
         $nodes = config('pelican.locations.' . $locationId . '.nodes', []);
 
         $node = Service::findViableNode(
-            allowedNodes: $order->option('node_id', []),
+            allowedNodes: $nodes,
             diskLimit: $order->option('disk_limit', 0),
             memoryLimit: $order->option('memory_limit', 0),
             cpuLimit: $order->option('cpu_limit', 0),
