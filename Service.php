@@ -275,17 +275,16 @@ class Service implements ServiceInterface
     {
         // define variables
         $pelicanUserId = $this->createPelicanUser();
-        dd($pelicanUserId);
         $order = $this->order;
         $package = $order->package;
 
         // Create the server on Pelican panel
         $createServerResponse = Service::makeRequest("/api/application/servers", 'post', [
             //'external_id' => "wemx{$order->id}",
-            'name' => $package->name,
+            'name' => 'My Cool Server',
             'user' => 1,
             'egg' => 3,
-            'allocation' => 4,
+            //'allocation' => 4,
             'startup' => 'java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}}',
             'docker_image' => 'ghcr.io/parkervcp/yolks:java_21',
             'environment' => [
