@@ -4,6 +4,7 @@ namespace App\Services\Pelican;
 
 use App\Services\ServiceInterface;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Validation\Rule;
 use Illuminate\Support\Str;
 use App\Models\Package;
 use App\Models\Order;
@@ -86,6 +87,36 @@ class Service implements ServiceInterface
     {
         $config = [
             [
+                "key" => "location_id",
+                "name" => "Location ID",
+                'col' => 'col-12',
+                "description" =>  "The location on which the server should be deployed.",
+                "type" => "text",
+                "rules" => ['required', 'string', Rule::in(array_keys(config('pelican.locations', [])))],
+                'is_configurable' => true,
+            ],
+            [
+                "key" => "egg_id",
+                "name" => "Egg ID",
+                'col' => 'col-12',
+                "description" =>  "Egg ID of the server you want to use for this package. You can find the egg ID by going to the egg page and looking at the URL. It will be the number at the end of the URL.",
+                "type" => "text",
+                'save_on_change' => true,
+                "rules" => ['required', 'numeric'],
+                'is_configurable' => false,
+            ],
+        ];
+
+        try {
+            // if egg id is not set return the default config
+            if(!$package->data('egg_id')) {
+                return $config;
+            }
+
+            $egg = Service::makeRequest('/api/application/eggs/' . $package->data('egg_id', 3), 'get', ['include' => 'variables']);
+
+            $config = array_merge($config, [
+            [
                 "col" => "col-4",
                 "key" => "database_limit",
                 "name" => "Database Limit",
@@ -97,12 +128,22 @@ class Service implements ServiceInterface
             ],
             [
                 "col" => "col-4",
-                "key" => "backup_limit_size",
-                "name" => "Backup Size Limit in MB",
-                "description" => "The total size of backups that can be created for this server Pterodactyl Panel.",
+                "key" => "allocation_limit",
+                "name" => "Allocation Limit",
+                "description" => "The total number of allocations a user is allowed to create for this server on Pterodactyl Panel.",
                 "type" => "number",
                 "min" => 0,
-                "rules" => ['required', 'numeric'],
+                "rules" => ['required'], // laravel validation rules
+                'is_configurable' => true,
+            ],
+            [
+                "col" => "col-4",
+                "key" => "backup_limit",
+                "name" => "Backup Limit",
+                "description" => "The total number of backups a user is allowed to create for this server on Pterodactyl Panel.",
+                "type" => "number",
+                "min" => 0,
+                "rules" => ['required'], // laravel validation rules
                 'is_configurable' => true,
             ],
             [
@@ -142,6 +183,7 @@ class Service implements ServiceInterface
                 "description" => __('admin.cpu_pinning_desc'),
                 "type" => "text",
                 "rules" => ['nullable'],
+                'is_configurable' => false,
             ],
             [
                 "col" => "col-4",
@@ -151,6 +193,7 @@ class Service implements ServiceInterface
                 "type" => "number",
                 "default_value" => 0,
                 "rules" => ['required'],
+                'is_configurable' => false,
             ],
             [
                 "col" => "col-4",
@@ -160,33 +203,56 @@ class Service implements ServiceInterface
                 "type" => "number",
                 "default_value" => 500,
                 "rules" => ['required'],
-            ],
-            [
-                "key" => "node_id",
-                "name" => "Node ID",
-                "description" =>  "The node on which the server should be deployed.",
-                "type" => "numbers",
-                "rules" => ['required', 'numeric'],
-                'is_configurable' => true,
-            ],
-            [
-                "key" => "egg_id",
-                "name" => "Egg ID",
-                "description" =>  "Egg ID of the server you want to use for this package. You can find the egg ID by going to the egg page and looking at the URL. It will be the number at the end of the URL.",
+                'is_configurable' => false,
+            ]]);
+
+            $config[] = [
+                "col" => "col-4",
+                "key" => "docker_image",
+                "name" => "Docker Image",
+                "description" => "Docker image to use for this server",
                 "type" => "text",
-                "default_value" => 3, // paper minecraft
-                'save_on_change' => true,
-                "rules" => ['required', 'numeric'],
-            ],
-            [
-                "key" => "dedicated_IP",
-                "name" => "Dedicated IP",
-                "description" =>  "If you want to assign a dedicated IP to this server, set this to true.",
-                "type" => "bool",
-                "rules" => ['boolean'],
-                'is_configurable' => true,
-            ],
-        ];
+                "default_value" => $egg['attributes']['docker_image'],
+                "rules" => ['required'],
+            ];
+
+            $config[] = [
+                "col" => "col-4",
+                "key" => "startup",
+                "name" => "Startup Command",
+                "description" => "Startup command for this server",
+                "type" => "text",
+                "default_value" => $egg['attributes']['startup'],
+                "rules" => ['required'],
+                'is_configurable' => false,
+            ];
+
+            foreach($egg['attributes']['relationships']['variables']['data'] as $variable) {
+                $variable = $variable['attributes'];
+                
+                // check if rules is an string, if so convert it to array
+                if(is_string($variable['rules'])) {
+                    $variable['rules'] = explode('|', $variable['rules']);
+                }
+                
+                $config[] = [
+                    "col" => "col-4",
+                    "key" => "environment[{$variable['env_variable']}]",
+                    "name" => $variable['name'],
+                    "description" => $variable['description'],
+                    "type" => "text",
+                    "default_value" => $variable['default_value'] ?? '',
+                    "rules" => $variable['rules'],
+                    'is_configurable' => false,
+                ];
+            }
+
+
+        } catch(\Exception $e) {
+            // if we reach here, the egg id is invalid or the egg does not exist
+            // return the default config
+            return $config;
+        }
 
         return $config;
     }
@@ -202,6 +268,47 @@ class Service implements ServiceInterface
     public static function setCheckoutConfig(Package $package): array
     {
         return [];
+    }
+
+    /**
+     * @throw Exception
+    */
+    public static function eventCheckout(Package $package)
+    {
+        try {
+            // get location id from the package data
+            $locationId = $package->data('location_id');
+            
+            if(!$locationId) {
+                throw new \Exception('Location ID has not been configured for this package');
+            }
+
+            // if location id is set as a custom option, we override the location id
+            if(isset(request()->get('custom_option')['location_id'])) {
+                $locationId = request()->get('custom_option')['location_id'];
+
+                // check if the location exists in the config
+                if(!array_key_exists($locationId, config('pelican.locations', []))) {
+                    throw new \Exception('Invalid location ID');
+                }
+            }
+
+            $allowedNodes = config('pelican.locations.' . request()->get('custom_option')['location_id'] . '.nodes', []);
+
+            // check if allowed nodes are set and are not empty
+            if(empty($allowedNodes)) {
+                throw new \Exception('No nodes are available for this location');
+            }
+
+            Service::findViableNode(
+                allowedNodes: $allowedNodes,
+                diskLimit: $package->data('disk_limit', 0),
+                memoryLimit: $package->data('memory_limit', 0),
+                cpuLimit: $package->data('cpu_limit', 0),
+            );
+        } catch(\Exception $e) {
+            return ['error' => $e->getMessage()];
+        }
     }
 
     /**
@@ -242,7 +349,7 @@ class Service implements ServiceInterface
     {
         $method = strtolower($method);
 
-        if (!in_array($method, ['get', 'post', 'put', 'delete'])) {
+        if (!in_array($method, ['get', 'post', 'put', 'delete', 'patch'])) {
             throw new \Exception('Invalid method');
         }
 
@@ -250,7 +357,7 @@ class Service implements ServiceInterface
             ->$method(settings('pelican::hostname') . $endpoint, $data);
 
         if ($response->failed() OR $response->json() === null) {
-            dd($response, $response->json(), $endpoint, $data, $method);
+            // dd($response, $response->json(), $endpoint, $data, $method);
             throw new \Exception("Failed to connect to Pelican API at endpoint: $endpoint with status code: {$response->status()} and response: {$response->body()}");
         }
 
@@ -262,7 +369,21 @@ class Service implements ServiceInterface
      */
     public function changePassword(Order $order, string $newPassword)
     {
+        try {
+            $pelicanUser = $order->getExternalUser()->data;
 
+            $response = Service::makeRequest("/api/application/users/{$pelicanUser['id']}", 'patch', [
+                'email' => $pelicanUser['email'],
+                'username' => $pelicanUser['username'],
+                'password' => $newPassword,
+            ]);
+
+            $order->updateExternalPassword($newPassword);
+        } catch (\Exception $error) {
+            return redirect()->back()->withError("Something went wrong, please try again.");
+        }
+
+        return redirect()->back()->withSuccess("Password has been changed");
     }
 
     /**
@@ -278,37 +399,40 @@ class Service implements ServiceInterface
         $order = $this->order;
         $package = $order->package;
 
+        $locationId = $order->option('location_id');
+
+        $nodes = config('pelican.locations.' . $locationId . '.nodes', []);
+
+        $node = Service::findViableNode(
+            allowedNodes: $order->option('node_id', []),
+            diskLimit: $order->option('disk_limit', 0),
+            memoryLimit: $order->option('memory_limit', 0),
+            cpuLimit: $order->option('cpu_limit', 0),
+        );
+
         // Create the server on Pelican panel
         $createServerResponse = Service::makeRequest("/api/application/servers", 'post', [
-            //'external_id' => "wemx{$order->id}",
-            'name' => 'My Cool Server',
-            'user' => 1,
-            'egg' => 3,
-            'startup' => 'java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}}',
-            'docker_image' => 'ghcr.io/parkervcp/yolks:java_21',
-            'environment' => [
-                'SERVER_JARFILE' => 'server.jar',
-                'BUILD_NUMBER' => 'latest',
-            ],
+            'external_id' => "wemx{$order->id}",
+            'name' => $package->name,
+            'user' => $pelicanUserId,
+            'egg' => $package->data('egg_id'),
+            'startup' => $package->data('startup'),
+            'docker_image' => $package->data('docker_image'),
+            'environment' => $package->data('environment', []),
             "limits" => [
-                "memory" => 0,
-                "swap" => 0,
-                "disk" => 0,
-                "io" => 0,
-                "cpu" => 0,
+                "memory" => $order->option('memory_limit', 0),
+                "swap" => $order->option('swap_limit', 0),
+                "disk" => $order->option('disk_limit', 0),
+                "io" => $order->option('block_io_weight', 500),
+                "cpu" => $order->option('cpu_limit', 0),
             ],
             "feature_limits" => [
-                "databases" => 0,
-                "allocations" => 0,
-                'backups' => 0,
+                "databases" => $order->option('database_limit', 0),
+                "allocations" => $order->option('allocation_limit', 0),
+                'backups' => $order->option('backup_limit', 0),
             ],
-            // 'deploy' => [
-            //     'locations' => [2],
-            //     'dedicated_ip' => false,
-            //     'port_range' => [25570, 25575],
-            // ],
             'allocation' => [
-                'default' => 5,
+                'default' => $node['allocation_id'],
             ],
             "start_on_completion" => true,
             "skip_scripts" => false,
@@ -316,7 +440,18 @@ class Service implements ServiceInterface
             "swap_disabled" => false,
         ]);
 
-        dd($createServerResponse, $createServerResponse->json(), $createServerResponse->status());
+        // check if the server was created successfully
+        if(!isset($createServerResponse['attributes'])) {
+            throw new \Exception('Failed to create server on Pelican panel');
+        }
+
+        $server = $createServerResponse['attributes'];
+
+        // store the server data locally
+        $order->update([
+            'external_id' => $server['id'],
+            'data' => $server,
+        ]);
     }
 
     /**
@@ -407,16 +542,65 @@ class Service implements ServiceInterface
     }
 
     /**
-     * This function is responsible for upgrading or downgrading
-     * an instance of this service. This method is optional
-     * If your service doesn't support upgrading, remove this method.
+     * Find a viable node based on the order requirements
+     * 
+     * Returns the node id and allocation id
      *
-     * Optional
-     * @return void
+     * @return array
      */
-    public function upgrade(Package $oldPackage, Package $newPackage)
+    private static function findViableNode(array $allowedNodes = [], string|int $diskLimit = 0, string|int $memoryLimit = 0, string|int $cpuLimit = 0): array
     {
+        $findDeployableNodes = Service::makeRequest('/api/application/nodes/deployable', 'get', [
+            'disk' => $diskLimit,
+            'memory' => $memoryLimit,
+            'cpu' => $cpuLimit,
+            'include' => 'allocations',
+        ]);
 
+        if(!isset($findDeployableNodes['data']) OR empty($findDeployableNodes['data'])) {
+            throw new \Exception('Could not find node satisfying the requirements');
+        }
+
+        $nodes = $findDeployableNodes['data'];
+
+        foreach($nodes as $node) {
+            $node = $node['attributes'];
+            
+            // if node is not in allowed nodes, skip
+            if(!empty($allowedNodes) AND !in_array($node['id'], $allowedNodes)) {
+                continue;
+            }
+
+           // now that we have determined the node, lets find an allocation
+           $allocations = $node['relationships']['allocations']['data'];
+
+           // lets go over each allocation and ensure its not in use
+           foreach($allocations as $allocation) {
+               $allocation = $allocation['attributes'];
+
+               // check if the allocation is in use
+               if($allocation['assigned']) {
+                   continue;
+               }
+
+               // allocation is not in use, return the node id and allocation id
+               return [
+                   'node_id' => $node['id'],
+                   'allocation_id' => $allocation['id'],
+               ];
+           }
+
+           // if we reach here, no allocation was found
+           // in the future, add logic to create a new allocation
+           // on one of the available nodes
+
+
+           // for now, throw an exception
+           throw new \Exception('Could not find a free allocation on the node, please contact support');
+        }
+
+        // theoretically, we should never reach here but we assume no node was found
+        throw new \Exception('Could not find a node satisfying the requirements');
     }
 
     /**
@@ -428,7 +612,7 @@ class Service implements ServiceInterface
      */
     public function suspend(array $data = [])
     {
-
+        Service::makeRequest("/api/application/servers/{$this->order->external_id}/suspend", 'post');
     }
 
     /**
@@ -440,7 +624,7 @@ class Service implements ServiceInterface
      */
     public function unsuspend(array $data = [])
     {
-
+        Service::makeRequest("/api/application/servers/{$this->order->external_id}/unsuspend", 'post');
     }
 
     /**
@@ -451,6 +635,6 @@ class Service implements ServiceInterface
      */
     public function terminate(array $data = [])
     {
-
+        Service::makeRequest("/api/application/servers/{$this->order->external_id}", 'delete');
     }
 }

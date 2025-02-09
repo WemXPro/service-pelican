@@ -23,7 +23,10 @@ class PelicanServiceProvider extends ServiceProvider
      */
     public function boot()
     {
-
+        // publish config file
+        $this->publishes([
+            __DIR__ . '/../assets/pelican.php' => config_path('pelican.php'),
+        ], 'pelican-config');
     }
 
     /**
