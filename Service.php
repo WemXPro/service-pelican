@@ -284,7 +284,6 @@ class Service implements ServiceInterface
             'name' => 'My Cool Server',
             'user' => 1,
             'egg' => 3,
-            //'allocation' => 4,
             'startup' => 'java -Xms128M -XX:MaxRAMPercentage=95.0 -Dterminal.jline=false -Dterminal.ansi=true -jar {{SERVER_JARFILE}}',
             'docker_image' => 'ghcr.io/parkervcp/yolks:java_21',
             'environment' => [
@@ -303,10 +302,13 @@ class Service implements ServiceInterface
                 "allocations" => 0,
                 'backups' => 0,
             ],
-            'deploy' => [
-                'locations' => [2],
-                'dedicated_ip' => false,
-                'port_range' => [25566, 25577],
+            // 'deploy' => [
+            //     'locations' => [2],
+            //     'dedicated_ip' => false,
+            //     'port_range' => [25570, 25575],
+            // ],
+            'allocation' => [
+                'default' => 5,
             ],
             "start_on_completion" => true,
             "skip_scripts" => false,
