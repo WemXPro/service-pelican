@@ -271,6 +271,9 @@ class Service implements ServiceInterface
     }
 
     /**
+    * This function is called right before the user makes the payment
+    * We can use it to check if there are allocations available
+    *
      * @throw Exception
     */
     public static function eventCheckout(Package $package)
@@ -469,7 +472,7 @@ class Service implements ServiceInterface
         }
 
         try {
-            // Attempt to find the user on Pelican with the external id
+            // Attempt to find the user on Pelican with the same email
             $userEmailResponse = Service::makeRequest("/api/application/users", 'get', [
                 'filter[email]' => $user->email,
             ]);
@@ -497,7 +500,7 @@ class Service implements ServiceInterface
         ]);
 
         // email the user their Pelican panel credentials
-        $this->emailPterodactylUserCredentials(
+        $this->emailPelicanCredentials(
             $user->email,
             $randomPassword
         );
@@ -529,7 +532,7 @@ class Service implements ServiceInterface
      *
      * @return void
      */
-    private function emailPterodactylUserCredentials(string $email, string $password): void
+    private function emailPelicanCredentials(string $email, string $password): void
     {
         $this->order->user->email([
             'subject' => 'Game Panel Account Created',
