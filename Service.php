@@ -416,7 +416,7 @@ class Service implements ServiceInterface
         // Create the server on Pelican panel
         $createServerResponse = Service::makeRequest("/api/application/servers", 'post', [
             'external_id' => "wemx{$order->id}",
-            'name' => $package->name,
+            'name' => "{$package->name} [{$order->user->username}]",
             'user' => $pelicanUserId,
             'egg' => $package->data('egg_id'),
             'startup' => $package->data('startup'),
