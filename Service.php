@@ -441,7 +441,7 @@ class Service implements ServiceInterface
             'egg' => $package->data('egg_id'),
             'startup' => $package->data('startup'),
             'docker_image' => $package->data('docker_image'),
-            'environment' => $package->data('environment', []),
+            'environment' => $environment,
             "limits" => [
                 "memory" => $order->option('memory_limit', 0) * 1024,
                 "swap" => $order->option('swap_limit', 0),
