@@ -159,7 +159,7 @@ class Service implements ServiceInterface
             [
                 "col" => "col-4",
                 "key" => "memory_limit",
-                "name" => "Memory Limit in MB",
+                "name" => "Memory Limit in GB",
                 "description" => "The maximum amount of memory allowed for this container. Setting this to 0 will allow unlimited memory in a container.",
                 "type" => "number",
                 "min" => 0,
@@ -169,7 +169,7 @@ class Service implements ServiceInterface
             [
                 "col" => "col-4",
                 "key" => "disk_limit",
-                "name" => "Disk Limit in MB",
+                "name" => "Disk Limit in GB",
                 "description" => "The maximum amount of memory allowed for this container. Setting this to 0 will allow unlimited memory in a container.",
                 "type" => "number",
                 "min" => 0,
@@ -247,6 +247,19 @@ class Service implements ServiceInterface
                 ];
             }
 
+            // For palworld, we add a configurable option for MAX_PLAYERS
+            if($egg['attributes']['name']) {
+                $config[] = [
+                    "col" => "col-4",
+                    "key" => "MAX_PLAYERS",
+                    "name" => "Max Players (Palworld)",
+                    "description" => "Maximum number of players allowed on the server",
+                    "type" => "text",
+                    "default_value" => 32,
+                    "rules" => ['required'],
+                    'is_configurable' => true,
+                ];
+            }
 
         } catch(\Exception $e) {
             // if we reach here, the egg id is invalid or the egg does not exist
@@ -413,6 +426,13 @@ class Service implements ServiceInterface
             cpuLimit: $order->option('cpu_limit', 0),
         );
 
+        $environment = $package->data('environment', []);
+
+        // if max players is set, add it to the environment
+        if($order->option('MAX_PLAYERS')) {
+            $environment['MAX_PLAYERS'] = $order->option('MAX_PLAYERS');
+        }
+
         // Create the server on Pelican panel
         $createServerResponse = Service::makeRequest("/api/application/servers", 'post', [
             'external_id' => "wemx{$order->id}",
@@ -423,9 +443,9 @@ class Service implements ServiceInterface
             'docker_image' => $package->data('docker_image'),
             'environment' => $package->data('environment', []),
             "limits" => [
-                "memory" => $order->option('memory_limit', 0),
+                "memory" => $order->option('memory_limit', 0) * 1024,
                 "swap" => $order->option('swap_limit', 0),
-                "disk" => $order->option('disk_limit', 0),
+                "disk" => $order->option('disk_limit', 0) * 1024,
                 "io" => $order->option('block_io_weight', 500),
                 "cpu" => $order->option('cpu_limit', 0),
             ],
