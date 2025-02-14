@@ -248,7 +248,7 @@ class Service implements ServiceInterface
             }
 
             // For palworld, we add a configurable option for MAX_PLAYERS
-            if($egg['attributes']['name']) {
+            if($egg['attributes']['name'] == 'Palworld') {
                 $config[] = [
                     "col" => "col-4",
                     "key" => "MAX_PLAYERS",
