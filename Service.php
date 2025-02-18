@@ -247,19 +247,29 @@ class Service implements ServiceInterface
                 ];
             }
 
-            // For palworld, we add a configurable option for MAX_PLAYERS
-            if($egg['attributes']['name']) {
-                $config[] = [
-                    "col" => "col-4",
-                    "key" => "MAX_PLAYERS",
-                    "name" => "Max Players (Palworld)",
-                    "description" => "Maximum number of players allowed on the server",
-                    "type" => "text",
-                    "default_value" => 32,
-                    "rules" => ['required'],
-                    'is_configurable' => true,
-                ];
-            }
+            // Add MAX_PLAYERS env variable
+            $config[] = [
+                "col" => "col-4",
+                "key" => "MAX_PLAYERS",
+                "name" => "Max Players Environment Variable",
+                "description" => "Maximum number of players allowed on the server",
+                "type" => "text",
+                "default_value" => 20,
+                "rules" => ['required'],
+                'is_configurable' => true,
+            ];
+
+            // Add SERVER_NAME env variable
+            $config[] = [
+                "col" => "col-4",
+                "key" => "SERVER_NAME",
+                "name" => "Server Name Environment Variable",
+                "description" => "Name of the server",
+                "type" => "text",
+                "default_value" => $package->name,
+                "rules" => ['required'],
+                'is_configurable' => true,
+            ];
 
         } catch(\Exception $e) {
             // if we reach here, the egg id is invalid or the egg does not exist
@@ -431,6 +441,11 @@ class Service implements ServiceInterface
         // if max players is set, add it to the environment
         if($order->option('MAX_PLAYERS')) {
             $environment['MAX_PLAYERS'] = $order->option('MAX_PLAYERS');
+        }
+
+        // if server name is set, add it to the environment
+        if($order->option('SERVER_NAME')) {
+            $environment['SERVER_NAME'] = $order->option('SERVER_NAME');
         }
 
         // Create the server on Pelican panel
